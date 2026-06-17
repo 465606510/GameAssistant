@@ -17,9 +17,6 @@ const showSettings = ref(false);
 const tempKey = ref('');
 const textQuery = ref('');
 
-// Expose apiKey as an object with value for hook compatibility
-const geminiApiKeyRef = computed(() => ({ value: apiKey.value }));
-
 const {
   state,
   wakeWord,
@@ -30,7 +27,7 @@ const {
   stopAgent,
   triggerManualQuery,
   queryGemini,
-} = useVoiceAgent(geminiApiKeyRef, SYSTEM_PROMPT);
+} = useVoiceAgent(apiKey, SYSTEM_PROMPT);
 
 // Watch for API Key change
 watch(apiKey, (newVal) => {
@@ -71,53 +68,53 @@ const getStateText = (stateVal: AgentState) => {
 </script>
 
 <template>
-  <div className="container">
-    <header className="header">
-      <div className="logo-container">
-        <span className="logo-icon">🎮</span>
-        <span className="logo-text">GameAssistant</span>
+  <div class="container">
+    <header class="header">
+      <div class="logo-container">
+        <span class="logo-icon">🎮</span>
+        <span class="logo-text">GameAssistant</span>
       </div>
-      <button className="settings-btn" @click="showSettings = !showSettings">
+      <button class="settings-btn" @click="showSettings = !showSettings">
         ⚙️ 设置 API
       </button>
     </header>
 
     <!-- Settings Modal -->
-    <div v-if="showSettings" className="modal-overlay">
-      <div className="settings-modal">
+    <div v-if="showSettings" class="modal-overlay">
+      <div class="settings-modal">
         <h2>配置大模型 API</h2>
-        <p className="modal-desc">此项目完全运行在您的浏览器本地，API 密钥仅保存在您的本地浏览器中，绝不会上传泄露。</p>
-        <div className="input-group">
+        <p class="modal-desc">此项目完全运行在您的浏览器本地，API 密钥仅保存在您的本地浏览器中，绝不会上传泄露。</p>
+        <div class="input-group">
           <label>Gemini API Key</label>
           <input
             type="password"
             placeholder="请输入以 AIzaSy 开头的 Gemini API Key"
             v-model="tempKey"
           />
-          <span className="key-tip">
+          <span class="key-tip">
             可在 <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a> 免费获取。
           </span>
         </div>
-        <div className="input-group">
+        <div class="input-group">
           <label>自定义唤醒词</label>
           <input
             type="text"
             v-model="wakeWord"
           />
         </div>
-        <div className="modal-actions">
-          <button className="btn-cancel" @click="showSettings = false">取消</button>
-          <button className="btn-save" @click="saveApiKey">保存</button>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="showSettings = false">取消</button>
+          <button class="btn-save" @click="saveApiKey">保存</button>
         </div>
       </div>
     </div>
 
-    <main className="main">
+    <main class="main">
       <!-- State visual indicator / Avatar -->
       <div :class="['avatar-container', `state-${state}`]">
-        <div className="avatar-pulse-1"></div>
-        <div className="avatar-pulse-2"></div>
-        <div className="avatar-sphere" @click="state === 'idle' ? startAgent() : stopAgent()">
+        <div class="avatar-pulse-1"></div>
+        <div class="avatar-pulse-2"></div>
+        <div class="avatar-sphere" @click="state === 'idle' ? startAgent() : stopAgent()">
           <span v-if="state === 'idle'">🔇</span>
           <span v-else-if="state === 'listening_for_wake'">🎙️</span>
           <span v-else-if="state === 'listening_for_query'">👂</span>
@@ -127,63 +124,63 @@ const getStateText = (stateVal: AgentState) => {
         </div>
       </div>
 
-      <h2 className="agent-status">{{ getStateText(state) }}</h2>
+      <h2 class="agent-status">{{ getStateText(state) }}</h2>
 
       <!-- Start / Stop Toggle -->
-      <div className="control-panel">
-        <button v-if="state === 'idle'" className="btn-primary" @click="startAgent()">
+      <div class="control-panel">
+        <button v-if="state === 'idle'" class="btn-primary" @click="startAgent()">
           开启语音唤醒
         </button>
-        <button v-else className="btn-danger" @click="stopAgent()">
+        <button v-else class="btn-danger" @click="stopAgent()">
           关闭语音助手
         </button>
 
-        <button v-if="state === 'listening_for_wake'" className="btn-secondary" @click="triggerManualQuery()">
+        <button v-if="state === 'listening_for_wake'" class="btn-secondary" @click="triggerManualQuery()">
           直接说话提问
         </button>
       </div>
 
       <!-- Text Input Search Bar -->
-      <form className="search-bar-form" @submit.prevent="handleTextSearchSubmit">
+      <form class="search-bar-form" @submit.prevent="handleTextSearchSubmit">
         <input
           type="text"
-          className="search-input"
+          class="search-input"
           :placeholder="apiKey ? '输入您的游戏问题并按回车...' : '请先在右上角配置 Gemini API'"
           v-model="textQuery"
           :disabled="!apiKey || state === 'thinking'"
         />
         <button
           type="submit"
-          className="search-submit-btn"
+          class="search-submit-btn"
           :disabled="!apiKey || !textQuery.trim() || state === 'thinking'"
         >
           🔍 搜索攻略
         </button>
       </form>
 
-      <div v-if="error" className="error-message">⚠️ {{ error }}</div>
+      <div v-if="error" class="error-message">⚠️ {{ error }}</div>
 
       <!-- Live Conversation Cards -->
-      <div className="content-cards">
-        <div v-if="transcript" className="card user-card">
-          <div className="card-header">玩家提问：</div>
-          <div className="card-body">“{{ transcript }}”</div>
+      <div class="content-cards">
+        <div v-if="transcript" class="card user-card">
+          <div class="card-header">玩家提问：</div>
+          <div class="card-body">“{{ transcript }}”</div>
         </div>
 
-        <div v-if="aiResponse" className="card assistant-card">
-          <div className="card-header">智能攻略回复：</div>
-          <div className="card-body markdown-content">{{ aiResponse }}</div>
+        <div v-if="aiResponse" class="card assistant-card">
+          <div class="card-header">智能攻略回复：</div>
+          <div class="card-body markdown-content">{{ aiResponse }}</div>
         </div>
       </div>
 
       <!-- Helper Panel -->
-      <div className="helper-panel">
+      <div class="helper-panel">
         <h3>您可以直接点击以下问题获取攻略（支持键盘输入及语音唤醒）：</h3>
-        <div className="sample-list">
+        <div class="sample-list">
           <button
             v-for="(q, idx) in SAMPLE_QUESTIONS"
             :key="idx"
-            className="sample-item"
+            class="sample-item"
             :disabled="!apiKey || state === 'thinking'"
             @click="queryGemini(q)"
           >
@@ -193,7 +190,7 @@ const getStateText = (stateVal: AgentState) => {
       </div>
     </main>
 
-    <footer className="footer">
+    <footer class="footer">
       <p>© 2026 GameAssistant. Built on Cloudflare Edge with Gemini.</p>
     </footer>
   </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { ref, onUnmounted } from 'vue';
 import { GoogleGenAI } from '@google/genai';
 
 // Declare types for Web Speech API in TypeScript
@@ -46,22 +46,16 @@ declare global {
 
 export type AgentState = 'disabled' | 'idle' | 'listening_for_wake' | 'listening_for_query' | 'thinking' | 'speaking';
 
-export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
-  const [state, setState] = useState<AgentState>('idle');
-  const stateRef = useRef<AgentState>('idle');
+export function useVoiceAgent(geminiApiKeyRef: { value: string }, systemPrompt: string) {
+  const state = ref<AgentState>('idle');
+  const wakeWord = ref('小飞');
+  const transcript = ref('');
+  const aiResponse = ref('');
+  const error = ref<string | null>(null);
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  const [wakeWord, setWakeWord] = useState('小飞');
-  const [transcript, setTranscript] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const wakeWordRecognitionRef = useRef<SpeechRecognition | null>(null);
-  const isSpeakingRef = useRef(false);
+  const recognition = ref<SpeechRecognition | null>(null);
+  const wakeWordRecognition = ref<SpeechRecognition | null>(null);
+  const isSpeaking = ref(false);
 
   // Web Audio API beep sound generator
   const playBeep = (frequency = 600, duration = 0.15) => {
@@ -90,24 +84,23 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
   const speakText = (text: string) => {
     if (!window.speechSynthesis) return;
     
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel();
-    isSpeakingRef.current = true;
-    setState('speaking');
+    isSpeaking.value = true;
+    state.value = 'speaking';
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     
     utterance.onend = () => {
-      isSpeakingRef.current = false;
-      setState('listening_for_wake');
+      isSpeaking.value = false;
+      state.value = 'listening_for_wake';
       startWakeWordListening();
     };
 
     utterance.onerror = (e) => {
       console.error('TTS error', e);
-      isSpeakingRef.current = false;
-      setState('listening_for_wake');
+      isSpeaking.value = false;
+      state.value = 'listening_for_wake';
       startWakeWordListening();
     };
 
@@ -116,19 +109,17 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
 
   // Call Gemini API
   const queryGemini = async (queryText: string) => {
-    if (!geminiApiKey) {
-      setError('请先配置 Gemini API Key');
-      setState('listening_for_wake');
-      startWakeWordListening();
+    if (!geminiApiKeyRef.value) {
+      error.value = '请先配置 Gemini API Key';
       return;
     }
 
-    setState('thinking');
-    setError(null);
+    state.value = 'thinking';
+    error.value = null;
+    transcript.value = queryText; // Show the user's query
 
     try {
-      // Correct modern Gemini API integration using @google/genai
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+      const ai = new GoogleGenAI({ apiKey: geminiApiKeyRef.value });
       
       const prompt = `
         系统设定：${systemPrompt}
@@ -143,22 +134,21 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
         contents: prompt,
       });
       const responseText = response.text || '未获取到回复内容';
-      setAiResponse(responseText);
+      aiResponse.value = responseText;
       speakText(responseText);
     } catch (err: any) {
       console.error('Gemini query error:', err);
       const errMsg = err.message || '大模型调用失败，请检查 API Key';
-      setError(errMsg);
+      error.value = errMsg;
       speakText('抱歉，获取攻略失败。');
     }
   };
 
   // Start listening for the actual question
   const startQueryListening = () => {
-    // Stop wake word listening
-    if (wakeWordRecognitionRef.current) {
+    if (wakeWordRecognition.value) {
       try {
-        wakeWordRecognitionRef.current.stop();
+        wakeWordRecognition.value.stop();
       } catch (e) {}
     }
 
@@ -168,13 +158,13 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
-      setError('当前浏览器不支持语音识别');
+      error.value = '当前浏览器不支持语音识别';
       return;
     }
 
-    playBeep(880, 0.1); // Higher beep indicating ready to listen query
-    setState('listening_for_query');
-    setTranscript('');
+    playBeep(880, 0.1);
+    state.value = 'listening_for_query';
+    transcript.value = '';
 
     const rec = new SpeechRec();
     rec.continuous = false;
@@ -183,11 +173,11 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
       const query = e.results[0][0].transcript;
-      setTranscript(query);
+      transcript.value = query;
       if (query.trim()) {
         queryGemini(query);
       } else {
-        setState('listening_for_wake');
+        state.value = 'listening_for_wake';
         startWakeWordListening();
       }
     };
@@ -195,41 +185,37 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', e);
       if (e.error !== 'no-speech') {
-        setError(`识别失败: ${e.error}`);
+        error.value = `识别失败: ${e.error}`;
       }
-      setState('listening_for_wake');
+      state.value = 'listening_for_wake';
       startWakeWordListening();
     };
 
     rec.onend = () => {
-      // If we are not thinking or speaking, revert to wake listening
-      setState((curr) => {
-        if (curr === 'listening_for_query') {
-          setTimeout(startWakeWordListening, 500);
-          return 'listening_for_wake';
-        }
-        return curr;
-      });
+      if (state.value === 'listening_for_query') {
+        setTimeout(startWakeWordListening, 500);
+        state.value = 'listening_for_wake';
+      }
     };
 
-    recognitionRef.current = rec;
+    recognition.value = rec;
     rec.start();
   };
 
   // Start listening for wake word
   const startWakeWordListening = () => {
-    if (state === 'disabled' || isSpeakingRef.current) return;
+    if (state.value === 'disabled' || isSpeaking.value) return;
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
-      setError('当前浏览器不支持语音识别');
-      setState('disabled');
+      error.value = '当前浏览器不支持语音识别';
+      state.value = 'disabled';
       return;
     }
 
-    if (wakeWordRecognitionRef.current) {
+    if (wakeWordRecognition.value) {
       try {
-        wakeWordRecognitionRef.current.stop();
+        wakeWordRecognition.value.stop();
       } catch(e) {}
     }
 
@@ -242,7 +228,7 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
       for (let i = e.resultIndex; i < e.results.length; ++i) {
         if (e.results[i].isFinal) {
           const text = e.results[i][0].transcript;
-          if (text.includes(wakeWord) || text.toLowerCase().includes('wake') || text.includes('唤醒')) {
+          if (text.includes(wakeWord.value) || text.toLowerCase().includes('wake') || text.includes('唤醒')) {
             rec.stop();
             startQueryListening();
             break;
@@ -253,30 +239,25 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
       console.error('Wake word recognition error:', e);
-      // Restart if network or other minor issues
       if (e.error === 'network') {
-        setError('语音引擎网络连接失败，请重试');
+        error.value = '语音引擎网络连接失败，请重试';
       }
     };
 
     rec.onend = () => {
-      // Auto restart wake word listening if state is still listening_for_wake
-      setState((curr) => {
-        if (curr === 'listening_for_wake') {
-          setTimeout(() => {
-            try {
-              if (stateRef.current !== 'disabled' && !isSpeakingRef.current) {
-                rec.start();
-              }
-            } catch(e) {}
-          }, 1000);
-        }
-        return curr;
-      });
+      if (state.value === 'listening_for_wake') {
+        setTimeout(() => {
+          try {
+            if (state.value !== 'disabled' && !isSpeaking.value) {
+              rec.start();
+            }
+          } catch(e) {}
+        }, 1000);
+      }
     };
 
-    wakeWordRecognitionRef.current = rec;
-    setState('listening_for_wake');
+    wakeWordRecognition.value = rec;
+    state.value = 'listening_for_wake';
     try {
       rec.start();
     } catch(e) {
@@ -285,33 +266,31 @@ export function useVoiceAgent(geminiApiKey: string, systemPrompt: string) {
   };
 
   const stopAgent = () => {
-    if (wakeWordRecognitionRef.current) {
-      try { wakeWordRecognitionRef.current.stop(); } catch(e) {}
+    if (wakeWordRecognition.value) {
+      try { wakeWordRecognition.value.stop(); } catch(e) {}
     }
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch(e) {}
+    if (recognition.value) {
+      try { recognition.value.stop(); } catch(e) {}
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    setState('idle');
+    state.value = 'idle';
   };
 
-  useEffect(() => {
-    return () => {
-      stopAgent();
-    };
-  }, []);
+  onUnmounted(() => {
+    stopAgent();
+  });
 
   return {
     state,
     wakeWord,
-    setWakeWord,
     transcript,
     aiResponse,
     error,
     startAgent: startWakeWordListening,
     stopAgent,
     triggerManualQuery: startQueryListening,
+    queryGemini,
   };
 }

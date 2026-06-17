@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare & Void local caches
+.void
+.wrangler
+void.json
+
